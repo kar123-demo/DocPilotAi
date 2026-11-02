@@ -24,7 +24,28 @@ def write_artifacts(
     api_reference.write_text("# API Reference\n\n" + "\n".join(
         f"- `{item['name']}({', '.join(item.get('parameters', []))})` - `{item['file']}:{item['line']}`"
         for item in functions[:150]), encoding="utf-8")
-    architecture_content = [f"# Architecture Guide: {project_name}\n"]
+    architecture_content = [
+        f"# Architecture Guide: {project_name}\n",
+        "\n## System Architecture\n",
+        "\n```mermaid\n",
+        "flowchart LR\n",
+        "  repo[GitHub repository] --> clone[Managed shallow clone]\n",
+        "  clone --> parse[Tree-sitter and static analysis]\n",
+        "  parse --> chunks[Symbols and source chunks]\n",
+        "  parse --> index[PostgreSQL and pgvector hybrid index]\n",
+        "  chunks --> index\n",
+        "  question[Report or chat request] --> retrieve[Hybrid retrieval]\n",
+        "  index --> retrieve\n",
+        "  retrieve --> llm[Grounded Groq generation]\n",
+        "  parse --> artifacts[DOCX, README, API reference, architecture]\n",
+        "  llm --> artifacts\n",
+        "  retrieve --> chat[Repository chat with source citations]\n",
+        "```\n",
+        "\nWith DATABASE_URL configured, PostgreSQL stores repository metadata, syntax-aware chunks, lexical terms, "
+        "and fixed-size hashed TF-IDF vectors in pgvector for approximate-nearest-neighbor retrieval. Repository "
+        "sync refreshes the managed clone and rebuilds the index; it does not push or auto-commit changes to Git. "
+        "Without DATABASE_URL, the development setup retains its local SQLite index.\n",
+    ]
     for category, entries in (("Structural UML", diagrams["structural"]), ("Behavioral UML", diagrams["behavioral"])):
         architecture_content.append(f"\n## {category}\n")
         for diagram in entries:

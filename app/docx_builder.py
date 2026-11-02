@@ -74,19 +74,19 @@ def build_report(output_path: Path, project_name: str, repository_url: str,
     document.add_page_break()
 
     # ---- Abstract -----------------------------------------------------------------------
-    _heading(document, "Abstract")
+    _heading(document, "1. Abstract")
     document.add_paragraph(narrative.get("abstract", ""))
 
     # ---- Introduction ---------------------------------------------------------------------
-    _heading(document, "Introduction")
+    _heading(document, "2. Introduction")
     document.add_paragraph(narrative.get("introduction", ""))
 
     # ---- Literature survey -------------------------------------------------------------
-    _heading(document, "Literature Survey / Existing System")
+    _heading(document, "3. Literature Survey / Existing System")
     document.add_paragraph(narrative.get("literature_survey", ""))
 
     # ---- Structural and behavioral diagrams ----------------------------------------------
-    _heading(document, "Structural and Behavioral Diagrams")
+    _heading(document, "4. Structural and Behavioral Diagrams")
     diagrams = sections.get("diagrams")
     if diagrams:
         for category, entries in (("Structural UML", diagrams.get("structural", [])),
@@ -114,18 +114,18 @@ def build_report(output_path: Path, project_name: str, repository_url: str,
             _code_block(document, behavioral_uml)
 
     # ---- Technology stack -----------------------------------------------------------------
-    _heading(document, "Technology Stack")
+    _heading(document, "5. Technology Stack")
     stack = sections.get("technology_stack", {})
     for label, key in (("Frontend", "frontend"), ("Backend", "backend"), ("Database", "database"), ("Tools/Libraries", "tools")):
         _heading(document, label, level=2)
         _bullets(document, stack.get(key, []))
 
     # ---- Limitations -----------------------------------------------------------------------
-    _heading(document, "Limitations")
+    _heading(document, "6. Limitations")
     _bullets(document, sections.get("limitations", []))
 
     # ---- Conclusion -------------------------------------------------------------------------
-    _heading(document, "Conclusion")
+    _heading(document, "7. Conclusion")
     document.add_paragraph(narrative.get("conclusion", ""))
 
     for paragraph in document.paragraphs:

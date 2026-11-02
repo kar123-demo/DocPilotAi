@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
+import os
 import re
 import sqlite3
 from collections import Counter
@@ -9,6 +11,62 @@ from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+VECTOR_DIMENSIONS = 384
+
+
+def _dense_vector(vector: dict[str, float]) -> list[float]:
+    """Project sparse TF-IDF terms into a stable, fixed-size signed hash vector."""
+    dense = [0.0] * VECTOR_DIMENSIONS
+    for term, weight in vector.items():
+        digest = hashlib.sha256(term.encode("utf-8")).digest()
+        slot = int.from_bytes(digest[:4], "big") % VECTOR_DIMENSIONS
+        dense[slot] += weight if digest[4] & 1 else -weight
+    magnitude = math.sqrt(sum(value * value for value in dense)) or 1.0
+    return [value / magnitude for value in dense]
+
+
+def _vector_literal(vector: list[float]) -> str:
+    return "[" + ",".join(f"{value:.8f}" for value in vector) + "]"
+
+
+def index_exists(index_path: Path) -> bool:
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        return index_path.exists()
+    try:
+        import psycopg
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT to_regclass('public.docpilot_projects')")
+                if cursor.fetchone()[0] is None:
+                    return False
+                cursor.execute("SELECT 1 FROM docpilot_projects WHERE project_id = %s", (index_path.stem,))
+                return cursor.fetchone() is not None
+    except ImportError:
+        return False
+
+
+def list_indexed_projects(index_root: Path) -> list[tuple[str, str]]:
+    """Return project IDs and repository URLs known to the active index backend."""
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        import psycopg
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT to_regclass('public.docpilot_projects')")
+                if cursor.fetchone()[0] is None:
+                    return []
+                cursor.execute("SELECT project_id, repository_url FROM docpilot_projects")
+                return [(row[0], row[1]) for row in cursor.fetchall()]
+    projects: dict[str, str] = {}
+    for index_path in (*index_root.glob("*.sqlite3"), *index_root.glob("*.json")):
+        try:
+            index = load_index(index_path, backend="sqlite")
+            projects[index_path.stem] = index["repository_url"]
+        except (OSError, ValueError, KeyError, sqlite3.Error, json.JSONDecodeError):
+            continue
+    return list(projects.items())
 
 
 def _terms(value: str) -> list[str]:
@@ -31,7 +89,7 @@ def _normalise(vector: dict[str, float]) -> dict[str, float]:
 
 
 def build_index(index_path: Path, repository_url: str, analysis: dict[str, Any]) -> dict[str, Any]:
-    """Persist project metadata, parsed symbols, and hybrid retrieval chunks in SQLite."""
+    """Persist the hybrid index to PostgreSQL/pgvector when configured, else local SQLite."""
     raw_chunks = []
     document_frequency: Counter[str] = Counter()
     file_symbols: dict[str, list[dict[str, Any]]] = {}
@@ -66,6 +124,59 @@ def build_index(index_path: Path, repository_url: str, analysis: dict[str, Any])
         "indexed_at": datetime.now(UTC).isoformat(),
         "index_type": "tree-sitter semantic chunks + hybrid TF-IDF lexical and symbol metadata",
     }
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        try:
+            import psycopg
+        except ImportError as error:
+            raise RuntimeError("DATABASE_URL is set but psycopg is not installed. Install requirements.txt.") from error
+        project_id = index_path.stem
+        payload["storage"] = "postgresql_pgvector"
+        payload["project_id"] = project_id
+        payload["database_url"] = database_url
+        payload["index_type"] = "PostgreSQL/pgvector + Tree-sitter semantic chunks + hybrid TF-IDF lexical and symbol metadata"
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
+                cursor.execute("""CREATE TABLE IF NOT EXISTS docpilot_projects (
+                    project_id TEXT PRIMARY KEY, repository_url TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL, indexed_at TEXT NOT NULL, index_type TEXT NOT NULL
+                )""")
+                cursor.execute("""CREATE TABLE IF NOT EXISTS docpilot_symbols (
+                    project_id TEXT NOT NULL, symbol_id BIGSERIAL, symbol_json TEXT NOT NULL
+                )""")
+                cursor.execute("""CREATE TABLE IF NOT EXISTS docpilot_chunks (
+                    project_id TEXT NOT NULL, chunk_id TEXT NOT NULL, file TEXT NOT NULL,
+                    language TEXT NOT NULL, start_line INTEGER NOT NULL, end_line INTEGER NOT NULL,
+                    content TEXT NOT NULL, terms_json TEXT NOT NULL, vector_json TEXT NOT NULL,
+                    semantic_json TEXT NOT NULL, embedding vector(384) NOT NULL,
+                    PRIMARY KEY (project_id, chunk_id)
+                )""")
+                cursor.execute("CREATE INDEX IF NOT EXISTS docpilot_chunks_embedding_idx ON docpilot_chunks USING hnsw (embedding vector_cosine_ops)")
+                cursor.execute("DELETE FROM docpilot_chunks WHERE project_id = %s", (project_id,))
+                cursor.execute("DELETE FROM docpilot_symbols WHERE project_id = %s", (project_id,))
+                cursor.execute("DELETE FROM docpilot_projects WHERE project_id = %s", (project_id,))
+                metadata = {key: payload[key] for key in ("summary", "files", "document_frequency")}
+                cursor.execute(
+                    "INSERT INTO docpilot_projects VALUES (%s, %s, %s, %s, %s)",
+                    (project_id, repository_url, json.dumps(metadata), payload["indexed_at"], payload["index_type"]),
+                )
+                cursor.executemany(
+                    "INSERT INTO docpilot_symbols (project_id, symbol_json) VALUES (%s, %s)",
+                    [(project_id, json.dumps(symbol)) for symbol in payload["symbols"]],
+                )
+                cursor.executemany(
+                    """INSERT INTO docpilot_chunks
+                    (project_id, chunk_id, file, language, start_line, end_line, content,
+                     terms_json, vector_json, semantic_json, embedding)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::vector)""",
+                    [(project_id, chunk["id"], chunk["file"], chunk["language"], chunk["start_line"],
+                      chunk["end_line"], chunk["content"], json.dumps(chunk["terms"]),
+                      json.dumps(chunk["vector"]), json.dumps(chunk.get("semantic_metadata", {})),
+                      _vector_literal(_dense_vector(chunk["vector"]))) for chunk in corpus],
+                )
+        return payload
+
     index_path.parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(index_path)) as connection, connection:
         connection.execute(
@@ -147,9 +258,36 @@ def build_index(index_path: Path, repository_url: str, analysis: dict[str, Any])
     return payload
 
 
-def load_index(index_path: Path) -> dict[str, Any]:
+def load_index(index_path: Path, backend: str = "auto") -> dict[str, Any]:
     if index_path.suffix.lower() == ".json":
         return json.loads(index_path.read_text(encoding="utf-8"))
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url and backend != "sqlite":
+        try:
+            import psycopg
+        except ImportError as error:
+            raise RuntimeError("DATABASE_URL is set but psycopg is not installed. Install requirements.txt.") from error
+        project_id = index_path.stem
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT repository_url, metadata_json, indexed_at, index_type FROM docpilot_projects WHERE project_id = %s", (project_id,))
+                project = cursor.fetchone()
+                if project is None:
+                    raise ValueError(f"Project index '{project_id}' was not found in PostgreSQL.")
+                cursor.execute("SELECT symbol_json FROM docpilot_symbols WHERE project_id = %s ORDER BY symbol_id", (project_id,))
+                symbols = [json.loads(row[0]) for row in cursor.fetchall()]
+                cursor.execute(
+                    """SELECT chunk_id, file, language, start_line, end_line, content,
+                    terms_json, vector_json, semantic_json FROM docpilot_chunks
+                    WHERE project_id = %s ORDER BY file, start_line""", (project_id,))
+                chunks = [{"id": row[0], "file": row[1], "language": row[2], "start_line": row[3],
+                           "end_line": row[4], "content": row[5], "terms": json.loads(row[6]),
+                           "vector": json.loads(row[7]), "semantic_metadata": json.loads(row[8])}
+                          for row in cursor.fetchall()]
+        metadata = json.loads(project[1])
+        return {"repository_url": project[0], **metadata, "indexed_at": project[2], "index_type": project[3],
+                "symbols": symbols, "chunks": chunks, "storage": "postgresql_pgvector",
+                "project_id": project_id, "database_url": database_url}
     with closing(sqlite3.connect(index_path)) as connection:
         project = connection.execute(
             "SELECT repository_url, summary_json, files_json, document_frequency_json, indexed_at, index_type "
@@ -202,8 +340,24 @@ def retrieve(index: dict[str, Any], question: str, limit: int = 5) -> list[dict[
     for symbol in index.get("symbols", []):
         symbols_by_file.setdefault(symbol["file"], []).append(symbol)
     walkthrough_intent = bool(re.search(r"\b(steps?|workflow|walkthrough|how|run|start|build)\b", question.lower()))
+    candidate_chunks = index["chunks"]
+    if index.get("storage") == "postgresql_pgvector":
+        try:
+            import psycopg
+            with psycopg.connect(index["database_url"]) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """SELECT chunk_id FROM docpilot_chunks WHERE project_id = %s
+                        ORDER BY embedding <=> %s::vector LIMIT 100""",
+                        (index["project_id"], _vector_literal(_dense_vector(query_vector))),
+                    )
+                    candidate_ids = {row[0] for row in cursor.fetchall()}
+            candidate_chunks = [chunk for chunk in candidate_chunks if chunk["id"] in candidate_ids]
+        except Exception:
+            # Keep lexical retrieval available if the optional vector extension/query is unavailable.
+            candidate_chunks = index["chunks"]
     scored = []
-    for chunk in index["chunks"]:
+    for chunk in candidate_chunks:
         terms = chunk["terms"]
         length = max(sum(terms.values()), 1)
         lexical = sum((terms.get(term, 0) / length) * _idf(document_frequency, total, term) * count for term, count in query_terms.items())

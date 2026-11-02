@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import ArtifactLinks from "./ArtifactLinks.jsx";
 
-export default function DocumentActions({ artifacts, downloadUrl, onBack, sections }) {
+export default function DocumentActions({ artifacts, downloadUrl, onBack, sections, onSaveProject, projectSaved, savingProject }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selected, setSelected] = useState(() =>
     Object.fromEntries(sections.map((section) => [section.id, true])),
@@ -42,6 +42,9 @@ export default function DocumentActions({ artifacts, downloadUrl, onBack, sectio
           ← New analysis
         </button>
         <div className="document-actions-right">
+          <button type="button" className="outline-button" onClick={onSaveProject} disabled={projectSaved || savingProject}>
+            {projectSaved ? "Project saved" : savingProject ? "Saving…" : "Save Project"}
+          </button>
           <button type="button" className="outline-button" onClick={() => setPickerOpen(true)}>
             Print / Save PDF
           </button>

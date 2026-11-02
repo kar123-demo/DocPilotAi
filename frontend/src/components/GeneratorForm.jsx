@@ -4,12 +4,13 @@ export default function GeneratorForm({ form, onChange, onSubmit, busy, aiReady,
   return (
     <form className="generator-form" onSubmit={onSubmit} id="generate">
       <div className="form-head">
-        <p className="eyebrow">Connect a repository</p>
-        <h2>Generate living documentation</h2>
+        <p className="eyebrow">Start a new analysis</p>
+        <h2>Bring your repository into focus.</h2>
         <p className="muted">
           Start with a public GitHub repository. We’ll map its code, build searchable project context, and create
           documentation grounded in the source.
         </p>
+        <div className="form-assurance"><span>01</span> Public GitHub repositories <span>02</span> No source code execution</div>
       </div>
 
       <label className="field-span">
@@ -45,7 +46,7 @@ export default function GeneratorForm({ form, onChange, onSubmit, busy, aiReady,
               Analyzing repository…
             </>
           ) : (
-            <>Generate complete documentation</>
+            <>Build my project report <span aria-hidden="true">↗</span></>
           )}
         </button>
         <p className="hint">

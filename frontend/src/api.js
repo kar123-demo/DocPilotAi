@@ -23,6 +23,13 @@ function formatDetail(detail) {
 
 export const getStatus = () => request("/api/status");
 
+export const getSavedProjects = () => request("/api/projects");
+
+export const saveProject = (report) =>
+  request("/api/projects/save", { method: "POST", body: JSON.stringify({ report }) });
+
+export const getSavedReport = (projectId) => request(`/api/projects/${projectId}/report`);
+
 export const analyzeRepository = (body) =>
   request("/api/analyze", { method: "POST", body: JSON.stringify(body) });
 

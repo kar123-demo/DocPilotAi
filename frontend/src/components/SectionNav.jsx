@@ -21,12 +21,12 @@ export default function SectionNav({ sections }) {
 
   return (
     <nav className="section-nav" aria-label="Report table of contents">
-      <p className="nav-label">Contents</p>
+      <p className="nav-label">Table of Contents</p>
       <ol>
         {sections.map((section, index) => (
           <li key={section.id}>
             <a href={`#${section.id}`} className={activeId === section.id ? "active" : ""}>
-              <span className="nav-index">{String(index + 1).padStart(2, "0")}</span>
+              <span className="nav-index">{index + 1}.</span>
               {section.title}
             </a>
           </li>

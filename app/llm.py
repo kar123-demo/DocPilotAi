@@ -4,9 +4,15 @@ import asyncio
 import json
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import dotenv_values, load_dotenv
+
+# In local development, the project .env is the key the user edits. Prefer it
+# over a stale GROQ_API_KEY inherited from the shell/IDE that launched the app.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=True)
 
 from .rag import build_grounded_context
 
@@ -19,6 +25,18 @@ DEFAULT_GROQ_MODEL_CHAT = "openai/gpt-oss-20b"
 
 def llm_provider() -> str:
     return "groq"
+
+
+def groq_key_source() -> str | None:
+    """Report the active key's source without exposing the key itself."""
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    active_key = os.environ.get("GROQ_API_KEY", "")
+    file_key = (dotenv_values(env_path).get("GROQ_API_KEY") or "").strip()
+    if active_key and file_key and active_key == file_key:
+        return "project .env"
+    if active_key:
+        return "process environment"
+    return None
 
 
 def resolve_model(requested: str | None = None) -> str:
@@ -189,6 +207,11 @@ async def _chat_completion(
                 json=request_body,
             )
             if response.is_error:
+                if response.status_code in (401, 403):
+                    raise RuntimeError(
+                        f"Groq rejected GROQ_API_KEY (HTTP {response.status_code}). "
+                        "Replace it in the project .env with a valid Groq API key, then restart the backend."
+                    )
                 detail = response.text[:240]
                 groq_key = os.environ.get("GROQ_API_KEY")
                 if groq_key:

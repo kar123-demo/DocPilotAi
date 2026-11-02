@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { analyzeRepository, getStatus } from "./api.js";
+import { analyzeRepository, getSavedProjects, getSavedReport, getStatus, saveProject } from "./api.js";
 import ArtifactLinks from "./components/ArtifactLinks.jsx";
 import ChatWidget from "./components/ChatWidget.jsx";
 import DocumentActions from "./components/DocumentActions.jsx";
@@ -10,7 +10,6 @@ import SectionNav from "./components/SectionNav.jsx";
 import StatusBadge from "./components/StatusBadge.jsx";
 
 const TOC = [
-  "Title Page",
   "Abstract",
   "Introduction",
   "Literature Survey / Existing System",
@@ -57,6 +56,17 @@ const ANALYZE_STEPS = [
   "Generating report prose and six grounded UML diagrams",
   "Assembling the engineering report",
 ];
+const SAVED_REPORT_KEY = "docpilot:last-report";
+
+function readSavedReport() {
+  try {
+    const saved = localStorage.getItem(SAVED_REPORT_KEY);
+    const parsed = saved ? JSON.parse(saved) : null;
+    return parsed?.report_id ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 const slug = (title) =>
   title
@@ -91,7 +101,7 @@ function Logo() {
 function ReportSection({ number, title, children }) {
   return (
     <section id={slug(title)} className="report-section-new" data-report-section={slug(title)}>
-      <div className="section-label">{String(number).padStart(2, "0")}</div>
+      <div className="section-label">{number}.</div>
       <div className="section-copy">
         <h2>{title}</h2>
         {children}
@@ -120,7 +130,39 @@ function AnalyzingOverlay({ busy }) {
   );
 }
 
-function Landing({ status, form, setForm, submit, busy, error }) {
+function SavedProjectsPanel({ projects, loading, error, onOpen, onClose }) {
+  return (
+    <section className="saved-projects-panel" aria-labelledby="saved-projects-title">
+      <div className="saved-projects-heading">
+        <div>
+          <p className="eyebrow">Your workspace</p>
+          <h2 id="saved-projects-title">My Projects</h2>
+        </div>
+        <button type="button" className="text-button" onClick={onClose}>Close</button>
+      </div>
+      {loading ? <p className="muted">Loading saved projects…</p> : null}
+      {error ? <p className="error-message">{error}</p> : null}
+      {!loading && !error && projects.length === 0 ? (
+        <p className="muted">No saved projects yet. Analyze a repository, then choose Save Project in its report.</p>
+      ) : null}
+      <div className="saved-projects-list">
+        {projects.map((project) => (
+          <article className="saved-project-card" key={project.report_id}>
+            <div>
+              <h3>{project.project_name}</h3>
+              <a href={project.repository_url} target="_blank" rel="noreferrer">{project.repository_url}</a>
+              <p>{project.summary?.files ?? 0} files · {(project.summary?.languages || []).join(", ") || "Languages unavailable"}</p>
+              <p>Last updated {project.last_updated ? new Date(project.last_updated).toLocaleString() : "Not available"}</p>
+            </div>
+            <button type="button" className="outline-button" onClick={() => onOpen(project.report_id)}>Open report</button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Landing({ status, form, setForm, submit, busy, error, onViewProjects, showProjects, projects, projectsLoading, projectsError, onOpenProject, onCloseProjects }) {
   const aiReady = Boolean(status?.llm_configured);
   const update = (name, value) => setForm((current) => ({ ...current, [name]: value }));
 
@@ -133,15 +175,27 @@ function Landing({ status, form, setForm, submit, busy, error }) {
           <a href="#platform">Platform</a>
           <a href="#pipeline">How it works</a>
           <a href="#generate">Generate</a>
+          <button type="button" className="nav-projects-button" onClick={onViewProjects}>My Projects</button>
         </nav>
         <StatusBadge status={status} />
       </header>
 
+      {showProjects ? (
+        <SavedProjectsPanel
+          projects={projects}
+          loading={projectsLoading}
+          error={projectsError}
+          onOpen={onOpenProject}
+          onClose={onCloseProjects}
+        />
+      ) : null}
+
       <main>
         <section className="studio-hero">
-          <p className="eyebrow">Engineering knowledge platform</p>
+          <div className="hero-copy">
+          <p className="hero-kicker"><span /> Repository intelligence for software teams</p>
           <h1>
-            Documentation that stays in lockstep with the <em>code</em>.
+            Make every codebase <em>make sense.</em>
           </h1>
           <p className="hero-lead">
             DocPilot AI analyzes software repositories and writes accurate technical documentation—READMEs, API
@@ -150,26 +204,28 @@ function Landing({ status, form, setForm, submit, busy, error }) {
           </p>
           <div className="hero-actions">
             <a className="generate-button" href="#generate">
-              Analyze a repository
+              Analyze a repository <span aria-hidden="true">↗</span>
             </a>
             <a className="ghost-button" href="#pipeline">
-              See the pipeline
+              Explore the workflow <span aria-hidden="true">↓</span>
             </a>
           </div>
           <dl className="hero-stats">
             <div>
-              <dt>8</dt>
+              <dt>7</dt>
               <dd>Report sections</dd>
             </div>
             <div>
-              <dt>AST + RAG</dt>
-              <dd>Code-grounded generation</dd>
+              <dt>6</dt>
+              <dd>UML diagrams</dd>
             </div>
             <div>
-              <dt>GitHub</dt>
-              <dd>Public repo ingestion</dd>
+              <dt>∞</dt>
+              <dd>Questions about your code</dd>
             </div>
           </dl>
+          </div>
+
         </section>
 
         <section className="capability-grid" id="platform">
@@ -225,7 +281,7 @@ function Landing({ status, form, setForm, submit, busy, error }) {
   );
 }
 
-function ReportView({ report, onNewReport }) {
+function ReportView({ report, onNewReport, onSaveProject, projectSaved, savingProject, saveError }) {
   const s = report.sections;
   const navSections = useMemo(
     () => TOC.map((title) => ({ id: slug(title), title })),
@@ -239,6 +295,9 @@ function ReportView({ report, onNewReport }) {
           artifacts={report.artifacts}
           downloadUrl={report.download_url}
           onBack={onNewReport}
+          onSaveProject={onSaveProject}
+          projectSaved={projectSaved}
+          savingProject={savingProject}
           sections={navSections}
         />
       </header>
@@ -249,6 +308,7 @@ function ReportView({ report, onNewReport }) {
         <a className="repo-link" href={report.repository_url} target="_blank" rel="noreferrer">
           {report.repository_url}
         </a>
+        {saveError ? <p className="generation-warning">{saveError}</p> : null}
         {report.llm_status ? (
           <p className="generation-warning">
             {report.llm_used
@@ -279,7 +339,9 @@ function ReportView({ report, onNewReport }) {
       <div className="report-grid-new">
         <SectionNav sections={navSections} />
         <main className="report-paper">
-          <ReportSection number={1} title="Title Page">
+          <section className="report-cover" aria-label="Report title page">
+            <p className="section-label">PROJECT REPORT</p>
+            <h2>{report.title_page.project_name}</h2>
             <div className="cover-grid">
               <div>
                 <small>PROJECT NAME</small>
@@ -292,11 +354,11 @@ function ReportView({ report, onNewReport }) {
                 </a>
               </div>
             </div>
-          </ReportSection>
-          <ReportSection number={2} title="Abstract">
+          </section>
+          <ReportSection number={1} title="Abstract">
             <p>{s.abstract}</p>
           </ReportSection>
-          <ReportSection number={3} title="Introduction">
+          <ReportSection number={2} title="Introduction">
             <div className="detail-grid">
               <div>
                 <h3>Problem Statement</h3>
@@ -312,10 +374,10 @@ function ReportView({ report, onNewReport }) {
               </div>
             </div>
           </ReportSection>
-          <ReportSection number={4} title="Literature Survey / Existing System">
+          <ReportSection number={3} title="Literature Survey / Existing System">
             <p>{s.literature_survey}</p>
           </ReportSection>
-          <ReportSection number={5} title="Structural and Behavioral Diagrams">
+          <ReportSection number={4} title="Structural and Behavioral Diagrams">
             <p className="section-intro">
               Six UML views generated from the project code and retrieved source context.
             </p>
@@ -336,7 +398,7 @@ function ReportView({ report, onNewReport }) {
               />
             ))}
           </ReportSection>
-          <ReportSection number={6} title="Technology Stack">
+          <ReportSection number={5} title="Technology Stack">
             <div className="stack-list">
               {Object.entries(s.technology_stack).map(([area, values]) => (
                 <div key={area}>
@@ -346,10 +408,10 @@ function ReportView({ report, onNewReport }) {
               ))}
             </div>
           </ReportSection>
-          <ReportSection number={7} title="Limitations">
+          <ReportSection number={6} title="Limitations">
             <List items={s.limitations} />
           </ReportSection>
-          <ReportSection number={8} title="Conclusion">
+          <ReportSection number={7} title="Conclusion">
             <p>{s.conclusion}</p>
           </ReportSection>
         </main>
@@ -364,9 +426,15 @@ export default function App() {
   const chatProjectId = chatParams.get("chatProject");
   const chatProjectName = chatParams.get("projectName") || "Project";
   const [status, setStatus] = useState(null);
-  const [report, setReport] = useState(null);
+  const [report, setReport] = useState(readSavedReport);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [projects, setProjects] = useState([]);
+  const [showProjects, setShowProjects] = useState(false);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState("");
+  const [savingProject, setSavingProject] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [form, setForm] = useState({
     repository_url: "",
     project_name: "",
@@ -377,8 +445,63 @@ export default function App() {
     getStatus()
       .then(setStatus)
       .catch(() => setStatus({ llm_configured: false }));
+    getSavedProjects().then(setProjects).catch(() => setProjects([]));
     return undefined;
   }, [chatProjectId]);
+
+  useEffect(() => {
+    try {
+      if (report) localStorage.setItem(SAVED_REPORT_KEY, JSON.stringify(report));
+      else localStorage.removeItem(SAVED_REPORT_KEY);
+    } catch {
+      // Keep the report usable in memory if browser storage is unavailable/full.
+    }
+  }, [report]);
+
+  const refreshProjects = async () => {
+    setProjectsLoading(true);
+    setProjectsError("");
+    try {
+      setProjects(await getSavedProjects());
+    } catch (err) {
+      setProjectsError(err.message);
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!showProjects) return undefined;
+    const timer = window.setInterval(() => { void refreshProjects(); }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [showProjects]);
+
+  const openSavedProject = async (projectId) => {
+    setProjectsLoading(true);
+    setProjectsError("");
+    try {
+      setReport(await getSavedReport(projectId));
+      setShowProjects(false);
+    } catch (err) {
+      setProjectsError(err.message);
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
+  const saveCurrentProject = async () => {
+    if (!report) return;
+    setSavingProject(true);
+    setSaveError("");
+    try {
+      await saveProject(report);
+      await refreshProjects();
+    } catch (err) {
+      setSaveError(err.message);
+    } finally {
+      setSavingProject(false);
+    }
+  };
 
   const submit = async (event) => {
     event.preventDefault();
@@ -403,10 +526,33 @@ export default function App() {
   }
 
   if (report) {
-    return <ReportView report={report} onNewReport={() => setReport(null)} />;
+    return (
+      <ReportView
+        report={report}
+        onNewReport={() => setReport(null)}
+        onSaveProject={saveCurrentProject}
+        projectSaved={projects.some((project) => project.report_id === report.report_id)}
+        savingProject={savingProject}
+        saveError={saveError}
+      />
+    );
   }
 
   return (
-    <Landing status={status} form={form} setForm={setForm} submit={submit} busy={busy} error={error} />
+    <Landing
+      status={status}
+      form={form}
+      setForm={setForm}
+      submit={submit}
+      busy={busy}
+      error={error}
+      onViewProjects={() => { setShowProjects(true); void refreshProjects(); }}
+      showProjects={showProjects}
+      projects={projects}
+      projectsLoading={projectsLoading}
+      projectsError={projectsError}
+      onOpenProject={openSavedProject}
+      onCloseProjects={() => setShowProjects(false)}
+    />
   );
 }
