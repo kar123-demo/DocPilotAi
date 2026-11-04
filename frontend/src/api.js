@@ -25,6 +25,9 @@ export const getStatus = () => request("/api/status");
 
 export const getSavedProjects = () => request("/api/projects");
 
+export const deleteSavedProject = (projectId) =>
+  request(`/api/projects/${projectId}`, { method: "DELETE" });
+
 export const saveProject = (report) =>
   request("/api/projects/save", { method: "POST", body: JSON.stringify({ report }) });
 

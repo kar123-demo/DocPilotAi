@@ -11,9 +11,7 @@ export default function StatusBadge({ status }) {
   return (
     <div className={`status-badge ${ready ? "ready" : "missing"}`}>
       <span className="status-dot" />
-      {ready
-        ? `${status.provider || "groq"} · ${status.model || "ready"}`
-        : status.llm_status || "Static analysis mode"}
+      {ready ? "Model activated" : "Model not activated"}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { analyzeRepository, getSavedProjects, getSavedReport, getStatus, saveProject } from "./api.js";
+import { analyzeRepository, deleteSavedProject, getSavedProjects, getSavedReport, getStatus, saveProject } from "./api.js";
 import ArtifactLinks from "./components/ArtifactLinks.jsx";
 import ChatWidget from "./components/ChatWidget.jsx";
 import DocumentActions from "./components/DocumentActions.jsx";
@@ -130,7 +130,7 @@ function AnalyzingOverlay({ busy }) {
   );
 }
 
-function SavedProjectsPanel({ projects, loading, error, onOpen, onClose }) {
+function SavedProjectsPanel({ projects, loading, error, onOpen, onDelete, onClose }) {
   return (
     <section className="saved-projects-panel" aria-labelledby="saved-projects-title">
       <div className="saved-projects-heading">
@@ -154,7 +154,10 @@ function SavedProjectsPanel({ projects, loading, error, onOpen, onClose }) {
               <p>{project.summary?.files ?? 0} files · {(project.summary?.languages || []).join(", ") || "Languages unavailable"}</p>
               <p>Last updated {project.last_updated ? new Date(project.last_updated).toLocaleString() : "Not available"}</p>
             </div>
-            <button type="button" className="outline-button" onClick={() => onOpen(project.report_id)}>Open report</button>
+            <div className="saved-project-actions">
+              <button type="button" className="outline-button" onClick={() => onOpen(project.report_id)}>Open report</button>
+              <button type="button" className="outline-button delete-project-button" onClick={() => onDelete(project)}>Delete</button>
+            </div>
           </article>
         ))}
       </div>
@@ -162,7 +165,7 @@ function SavedProjectsPanel({ projects, loading, error, onOpen, onClose }) {
   );
 }
 
-function Landing({ status, form, setForm, submit, busy, error, onViewProjects, showProjects, projects, projectsLoading, projectsError, onOpenProject, onCloseProjects }) {
+function Landing({ status, form, setForm, submit, busy, error, onViewProjects, showProjects, projects, projectsLoading, projectsError, onOpenProject, onDeleteProject, onCloseProjects }) {
   const aiReady = Boolean(status?.llm_configured);
   const update = (name, value) => setForm((current) => ({ ...current, [name]: value }));
 
@@ -186,6 +189,7 @@ function Landing({ status, form, setForm, submit, busy, error, onViewProjects, s
           loading={projectsLoading}
           error={projectsError}
           onOpen={onOpenProject}
+          onDelete={onDeleteProject}
           onClose={onCloseProjects}
         />
       ) : null}
@@ -265,8 +269,6 @@ function Landing({ status, form, setForm, submit, busy, error, onViewProjects, s
             onSubmit={submit}
             busy={busy}
             aiReady={aiReady}
-            llmHint={status?.llm_status}
-            models={status?.models}
             error={error}
           />
         </section>
@@ -298,7 +300,6 @@ function ReportView({ report, onNewReport, onSaveProject, projectSaved, savingPr
           onSaveProject={onSaveProject}
           projectSaved={projectSaved}
           savingProject={savingProject}
-          sections={navSections}
         />
       </header>
 
@@ -489,6 +490,20 @@ export default function App() {
     }
   };
 
+  const removeSavedProject = async (project) => {
+    if (!window.confirm(`Delete “${project.project_name}”? Its saved report, generated files, repository copy, and search index will be removed.`)) return;
+    setProjectsLoading(true);
+    setProjectsError("");
+    try {
+      await deleteSavedProject(project.report_id);
+      setProjects((current) => current.filter((item) => item.report_id !== project.report_id));
+    } catch (err) {
+      setProjectsError(err.message);
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
   const saveCurrentProject = async () => {
     if (!report) return;
     setSavingProject(true);
@@ -552,6 +567,7 @@ export default function App() {
       projectsLoading={projectsLoading}
       projectsError={projectsError}
       onOpenProject={openSavedProject}
+      onDeleteProject={removeSavedProject}
       onCloseProjects={() => setShowProjects(false)}
     />
   );

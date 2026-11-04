@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title description">
+  <title id="title">DocPilot AI system architecture</title>
+  <desc id="description">Architecture diagram showing the React frontend, FastAPI backend, repository analysis and RAG pipeline, Groq generation, storage, and generated artifacts.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b0d17"/><stop offset="1" stop-color="#13152a"/></linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8c76ff"/><stop offset="1" stop-color="#5e4bd1"/></linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8f80ff"/></marker>
+    <style>
+      text{font-family:Inter,Segoe UI,Arial,sans-serif;fill:#eef0ff}.title{font-size:34px;font-weight:700;letter-spacing:-.7px}.subtitle{font-size:15px;fill:#aab2ce}.lane{font-size:13px;font-weight:700;letter-spacing:1.6px;fill:#a99bff}.box{fill:#151a2b;stroke:#343b59;stroke-width:1.5}.box-accent{fill:#1b1936;stroke:#695bd0;stroke-width:1.6}.box-title{font-size:18px;font-weight:650}.body{font-size:14px;fill:#b7bfd8}.small{font-size:12px;fill:#939dbb}.flow{fill:none;stroke:#8f80ff;stroke-width:2;marker-end:url(#arrow)}.flow-muted{fill:none;stroke:#59617c;stroke-width:1.7;stroke-dasharray:6 6;marker-end:url(#arrow)}.label{font-size:12px;fill:#b9b2f4}.chip{fill:#242142;stroke:#514995;stroke-width:1}
+    </style>
+  </defs>
+  <rect width="1440" height="900" rx="24" fill="url(#bg)"/>
+  <text x="64" y="70" class="title">DocPilot AI · System Architecture</text>
+  <text x="64" y="101" class="subtitle">Repository analysis, grounded documentation, and source code chat</text>
+
+  <text x="64" y="160" class="lane">USER EXPERIENCE</text>
+  <text x="355" y="160" class="lane">APPLICATION API</text>
+  <text x="690" y="160" class="lane">ANALYSIS &amp; GENERATION</text>
+  <text x="1080" y="160" class="lane">DATA &amp; OUTPUTS</text>
+
+  <!-- Frontend -->
+  <rect x="64" y="190" width="235" height="176" rx="16" class="box-accent"/>
+  <text x="88" y="226" class="box-title">React web app</text>
+  <text x="88" y="256" class="body">Repository form &amp; status</text>
+  <text x="88" y="281" class="body">Project reports &amp; diagrams</text>
+  <text x="88" y="306" class="body">Saved projects</text>
+  <text x="88" y="331" class="body">Repository chat</text>
+
+  <!-- API -->
+  <rect x="355" y="190" width="260" height="176" rx="16" class="box"/>
+  <text x="379" y="226" class="box-title">FastAPI backend</text>
+  <text x="379" y="256" class="body">Analyze &amp; synchronize</text>
+  <text x="379" y="281" class="body">Save, open &amp; delete projects</text>
+  <text x="379" y="306" class="body">Report &amp; artifact downloads</text>
+  <text x="379" y="331" class="body">Grounded chat endpoint</text>
+
+  <!-- Analysis -->
+  <rect x="690" y="190" width="300" height="176" rx="16" class="box"/>
+  <text x="714" y="226" class="box-title">Repository analysis</text>
+  <text x="714" y="256" class="body">Clone public GitHub repository</text>
+  <text x="714" y="281" class="body">Tree-sitter AST &amp; static parsing</text>
+  <text x="714" y="306" class="body">Extract files, symbols &amp; chunks</text>
+  <text x="714" y="331" class="body">Build verified project facts</text>
+
+  <!-- Storage -->
+  <rect x="1080" y="190" width="296" height="176" rx="16" class="box"/>
+  <text x="1104" y="226" class="box-title">Project index</text>
+  <text x="1104" y="256" class="body">PostgreSQL + pgvector</text>
+  <text x="1104" y="281" class="body">or local SQLite</text>
+  <text x="1104" y="306" class="body">Symbols, source chunks, terms</text>
+  <text x="1104" y="331" class="body">Hybrid retrieval &amp; reranking</text>
+
+  <!-- Main horizontal flow -->
+  <path d="M299 278H347" class="flow"/><text x="302" y="263" class="label">HTTP</text>
+  <path d="M615 278H682" class="flow"/><text x="621" y="263" class="label">analyze / sync</text>
+  <path d="M990 278H1072" class="flow"/><text x="1001" y="263" class="label">index source</text>
+
+  <!-- Generation and retrieval -->
+  <rect x="690" y="440" width="300" height="174" rx="16" class="box-accent"/>
+  <text x="714" y="476" class="box-title">Grounded generation</text>
+  <text x="714" y="506" class="body">Retrieve relevant source evidence</text>
+  <text x="714" y="531" class="body">Groq LLM generates report sections</text>
+  <text x="714" y="556" class="body">Groq LLM generates UML diagrams</text>
+  <text x="714" y="586" class="small">Chat uses retrieved chunks + conversation context</text>
+
+  <rect x="1080" y="440" width="296" height="174" rx="16" class="box"/>
+  <text x="1104" y="476" class="box-title">Generated artifacts</text>
+  <text x="1104" y="506" class="body">DOCX engineering report</text>
+  <text x="1104" y="531" class="body">README &amp; API reference</text>
+  <text x="1104" y="556" class="body">Architecture guide &amp; UML images</text>
+  <text x="1104" y="586" class="small">Files stored under outputs/</text>
+
+  <path d="M1228 366V430" class="flow"/><text x="1240" y="405" class="label">retrieve</text>
+  <path d="M1080 526H998" class="flow"/><text x="1007" y="511" class="label">source context</text>
+  <path d="M990 575H1072" class="flow"/><text x="1005" y="599" class="label">write</text>
+
+  <!-- Project metadata and cache -->
+  <rect x="355" y="440" width="260" height="174" rx="16" class="box"/>
+  <text x="379" y="476" class="box-title">Project lifecycle</text>
+  <text x="379" y="506" class="body">Saved project registry</text>
+  <text x="379" y="531" class="body">Cached report response</text>
+  <text x="379" y="556" class="body">Periodic repository refresh</text>
+  <text x="379" y="586" class="small">Local files under outputs/ and temp/</text>
+  <path d="M485 366V430" class="flow-muted"/><text x="496" y="405" class="label">save / load</text>
+  <path d="M690 526H623" class="flow-muted"/><text x="625" y="511" class="label">report data</text>
+
+  <!-- External services -->
+  <rect x="64" y="690" width="1312" height="118" rx="18" class="box"/>
+  <text x="90" y="729" class="lane">EXTERNAL SERVICES</text>
+  <rect x="322" y="712" width="315" height="70" rx="12" class="chip"/>
+  <text x="346" y="743" class="box-title">GitHub</text>
+  <text x="346" y="765" class="small">Public source repository</text>
+  <rect x="682" y="712" width="315" height="70" rx="12" class="chip"/>
+  <text x="706" y="743" class="box-title">Groq API</text>
+  <text x="706" y="765" class="small">Report prose, UML &amp; chat</text>
+  <rect x="1042" y="712" width="300" height="70" rx="12" class="chip"/>
+  <text x="1066" y="743" class="box-title">Kroki renderer</text>
+  <text x="1066" y="765" class="small">PlantUML diagram rendering</text>
+  <path d="M480 712V650H840V374" class="flow-muted"/><text x="638" y="642" class="label">clone source</text>
+  <path d="M840 614V704" class="flow-muted"/><text x="850" y="664" class="label">LLM requests</text>
+  <path d="M990 556H1025V650H1192V704" class="flow-muted"/><text x="1034" y="642" class="label">render UML</text>
+  <text x="64" y="852" class="small">Data flow: source code is analyzed statically; retrieved repository evidence grounds generated documentation and chat responses.</text>
+</svg>

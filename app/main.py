@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import shutil
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,7 +21,7 @@ from .docx_builder import build_report
 from .llm import chat_model, configured_groq_models, generate_narrative_sections, generate_uml_diagrams, groq_key_source, llm_provider, llm_ready, parse_bullets, parse_labeled_paragraphs, report_model_assignments, resolve_model
 from .uml import render_plantuml_png
 from .parser import analyze_repository
-from .rag import build_index, build_project_overview, index_exists, list_indexed_projects, load_index, retrieve
+from .rag import build_index, build_project_overview, delete_project_index, index_exists, list_indexed_projects, load_index, retrieve
 from .artifacts import write_artifacts
 from .sections import build_technology_stack
 from .utils import build_abbreviations, build_references, job_id_for, read_readme_excerpt, validate_github_url
@@ -255,6 +256,26 @@ def _read_saved_projects() -> dict[str, dict]:
 async def saved_projects() -> list[dict]:
     projects = _read_saved_projects()
     return sorted(projects.values(), key=lambda item: item.get("saved_at", ""), reverse=True)
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_saved_project(project_id: str) -> dict[str, str]:
+    if not re.fullmatch(r"[a-f0-9]{12}", project_id):
+        raise HTTPException(status_code=422, detail="Invalid project ID.")
+    projects = _read_saved_projects()
+    if project_id not in projects:
+        raise HTTPException(status_code=404, detail="Saved project not found.")
+
+    del projects[project_id]
+    SAVED_PROJECTS_PATH.write_text(json.dumps(projects, indent=2), encoding="utf-8")
+    _report_cache_path(project_id).unlink(missing_ok=True)
+    delete_project_index(project_id, INDEX_ROOT)
+    shutil.rmtree(SYNC_ROOT / project_id, ignore_errors=True)
+    for path in OUTPUTS.glob(f"{project_id}.*"):
+        if path.is_file():
+            path.unlink(missing_ok=True)
+    shutil.rmtree(OUTPUTS / project_id, ignore_errors=True)
+    return {"status": "deleted", "report_id": project_id}
 
 
 @app.post("/api/projects/save")

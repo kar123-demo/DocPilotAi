@@ -1,4 +1,4 @@
-export default function GeneratorForm({ form, onChange, onSubmit, busy, aiReady, llmHint, models, error }) {
+export default function GeneratorForm({ form, onChange, onSubmit, busy, aiReady, error }) {
   const update = (event) => onChange(event.target.name, event.target.value);
 
   return (
@@ -50,9 +50,7 @@ export default function GeneratorForm({ form, onChange, onSubmit, busy, aiReady,
           )}
         </button>
         <p className="hint">
-          {aiReady
-            ? `Groq models — report quality: ${models?.quality || "configured"}; report fast: ${models?.fast || "configured"}; UML: ${models?.uml || "configured"}; source chat: ${models?.chat || "configured"}.`
-            : llmHint || "Configure GROQ_API_KEY in the backend environment. Static analysis remains available without it."}
+          {aiReady ? "Model activated" : "Model not activated"}
         </p>
       </div>
       {error ? <p className="error-message">{error}</p> : null}

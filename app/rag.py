@@ -69,6 +69,24 @@ def list_indexed_projects(index_root: Path) -> list[tuple[str, str]]:
     return list(projects.items())
 
 
+def delete_project_index(project_id: str, index_root: Path) -> None:
+    """Remove a project's index from the configured storage backend."""
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        import psycopg
+        with psycopg.connect(database_url) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT to_regclass('public.docpilot_projects')")
+                if cursor.fetchone()[0] is None:
+                    return
+                cursor.execute("DELETE FROM docpilot_chunks WHERE project_id = %s", (project_id,))
+                cursor.execute("DELETE FROM docpilot_symbols WHERE project_id = %s", (project_id,))
+                cursor.execute("DELETE FROM docpilot_projects WHERE project_id = %s", (project_id,))
+        return
+    for suffix in (".sqlite3", ".sqlite3-wal", ".sqlite3-shm", ".json"):
+        (index_root / f"{project_id}{suffix}").unlink(missing_ok=True)
+
+
 def _terms(value: str) -> list[str]:
     """Tokenize prose plus source identifiers (snake_case, kebab-case, CamelCase)."""
     raw_terms = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]{1,}", value.lower())

@@ -1619,9 +1619,13 @@ body { color: var(--ink); background: #090b13; }
 .saved-project-card h3 { margin: 0 0 6px; color: #f3f1ff; }
 .saved-project-card a { color: #a9a0ff; overflow-wrap: anywhere; }
 .saved-project-card p { margin: 8px 0 0; color: #9ca5bd; font-size: 13px; }
+.saved-project-actions { display: flex; gap: 10px; flex-shrink: 0; }
+.delete-project-button { border-color: #75404a; color: #ffb1bb; }
+.delete-project-button:hover { border-color: #a74f5e; background: #321c28; }
 @media (max-width: 600px) {
   .saved-projects-panel { width: calc(100% - 28px); padding: 18px; }
   .saved-project-card { align-items: flex-start; flex-direction: column; }
+  .saved-project-actions { width: 100%; }
 }
 .metrics-grid b { color: #f2f1fb; }
 .metrics-grid span,.language-table th { color: #a2aac0; }
